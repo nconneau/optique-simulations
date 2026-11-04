@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulation Optique - Lentille Liquide Smartphone</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', system-ui, -apple-system, sans-serif; user-select: none; }
+        canvas { touch-action: none; }
+        input[type=range] { accent-color: #2563eb; }
+        /* Representation surligne pour quantites algebriques */
+        .overline {
+            border-top: 1.5px solid currentColor;
+            padding-top: 1px;
+            display: inline-block;
+            line-height: 1;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col justify-between p-3 md:p-6">
+
+    <!-- Top Sliders Bar -->
+    <header class="bg-slate-800/90 border border-slate-700 rounded-2xl p-4 shadow-xl mb-4">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            
+            <!-- Slider 1: Position Objet -->
+            <div class="space-y-1">
+                <div class="flex justify-between items-center text-sm font-semibold">
+                    <label for="slider-oa" class="text-slate-300 flex items-center gap-1">
+                        Position de l'objet (<span class="overline">OA</span>)
+                    </label>
+                    <span id="val-oa" class="text-blue-400 font-mono font-bold">-250 mm</span>
+                </div>
+                <input type="range" id="slider-oa" min="-350" max="-100" value="-250" step="5" class="w-full h-2.5 bg-slate-700 rounded-lg cursor-pointer">
+            </div>
+
+            <!-- Slider 2: Courbure / Focale f' de la lentille liquide -->
+            <div class="space-y-1">
+                <div class="flex justify-between items-center text-sm font-semibold">
+                    <label for="slider-focal" class="text-slate-300 flex items-center gap-1">
+                        Lentille liquide / Distance focale (f')
+                    </label>
+                    <span id="val-focal" class="text-emerald-400 font-mono font-bold">+50.0 mm</span>
+                </div>
+                <input type="range" id="slider-focal" min="30" max="60" value="50" step="0.5" class="w-full h-2.5 bg-slate-700 rounded-lg cursor-pointer">
+            </div>
+
+            <!-- Slider 3: Taille Objet -->
+            <div class="space-y-1">
+                <div class="flex justify-between items-center text-sm font-semibold">
+                    <label for="slider-ab" class="text-slate-300 flex items-center gap-1">
+                        Taille de l'objet (<span class="overline">AB</span>)
+                    </label>
+                    <span id="val-ab" class="text-amber-400 font-mono font-bold">+50 mm</span>
+                </div>
+                <input type="range" id="slider-ab" min="20" max="70" value="50" step="2" class="w-full h-2.5 bg-slate-700 rounded-lg cursor-pointer">
+            </div>
+
+        </div>
+    </header>
+
+    <!-- Central Interactive Area -->
+    <div class="flex-1 relative bg-slate-800 rounded-2xl border border-slate-700 shadow-2xl overflow-hidden min-h-[440px] flex flex-col">
+        
+        <!-- Main Optical Bench Canvas -->
+        <div class="flex-1 relative w-full h-full">
+            <canvas id="optics-canvas" class="w-full h-full absolute inset-0"></canvas>
+
+            <!-- LCD Screen Preview (Bottom Right Camera Viewer) -->
+            <div class="absolute bottom-4 right-4 bg-slate-950/90 border-2 border-slate-600 rounded-xl p-2.5 shadow-2xl z-10 w-64 md:w-80 flex flex-col items-center">
+                <div class="w-full flex justify-between items-center mb-1.5 px-1">
+                    <span class="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                        Écran du capteur (C)
+                    </span>
+                    <span id="focus-indicator" class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Mise au point NETTE</span>
+                </div>
+                
+                <div class="relative w-full aspect-[4/3] bg-black rounded-lg overflow-hidden border border-slate-700">
+                    <canvas id="lcd-canvas" class="w-full h-full"></canvas>
+                    <!-- Target Grid lines -->
+                    <div class="absolute inset-0 pointer-events-none grid grid-cols-3 grid-rows-3 opacity-20">
+                        <div class="border-r border-b border-white"></div>
+                        <div class="border-r border-b border-white"></div>
+                        <div class="border-b border-white"></div>
+                        <div class="border-r border-b border-white"></div>
+                        <div class="border-r border-b border-white"></div>
+                        <div class="border-b border-white"></div>
+                    </div>
+                </div>
+                <p class="text-[11px] text-slate-400 mt-1.5 text-center italic">Image renversée sur le capteur (<span class="overline">A'B'</span> &lt; 0)</p>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Bottom Values Panel (Moved to Bottom) -->
+    <div id="algebraic-panel" class="mt-4 bg-slate-800/95 border border-slate-700 rounded-2xl p-3 shadow-xl flex flex-wrap justify-around items-center gap-3 text-sm font-mono transition-all duration-300">
+        <div class="flex items-center gap-1.5">
+            <span class="text-slate-400 font-sans text-xs flex items-center"><span class="overline">OA</span>&nbsp;=</span>
+            <span id="disp-oa" class="text-blue-400 font-bold">-250.0 mm</span>
+        </div>
+        <div class="flex items-center gap-1.5 border-l border-slate-700 pl-3 md:pl-6">
+            <span class="text-slate-400 font-sans text-xs flex items-center"><span class="overline">AB</span>&nbsp;=</span>
+            <span id="disp-ab" class="text-amber-400 font-bold">+50.0 mm</span>
+        </div>
+        <div class="flex items-center gap-1.5 border-l border-slate-700 pl-3 md:pl-6">
+            <span class="text-slate-400 font-sans text-xs flex items-center"><span class="overline">OA'</span>&nbsp;=</span>
+            <span id="disp-oap" class="text-emerald-400 font-bold">+62.5 mm</span>
+        </div>
+        <div class="flex items-center gap-1.5 border-l border-slate-700 pl-3 md:pl-6">
+            <span class="text-slate-400 font-sans text-xs flex items-center"><span class="overline">A'B'</span>&nbsp;=</span>
+            <span id="disp-abp" class="text-rose-400 font-bold">-12.5 mm</span>
+        </div>
+    </div>
+
+    <!-- Bottom Checkboxes Controls Bar -->
+    <footer class="bg-slate-800/90 border border-slate-700 rounded-2xl p-3.5 shadow-xl mt-4 flex flex-wrap items-center justify-between gap-3 text-xs md:text-sm">
+        <div class="flex flex-wrap items-center gap-4">
+            <label class="flex items-center space-x-2 cursor-pointer hover:text-blue-300 transition">
+                <input type="checkbox" id="chk-inf" class="rounded bg-slate-700 border-slate-600 text-blue-600 focus:ring-blue-500 w-4 h-4">
+                <span class="font-medium text-sky-300">Objet à l'infini</span>
+            </label>
+
+            <label class="flex items-center space-x-2 cursor-pointer hover:text-red-300 transition">
+                <input type="checkbox" id="chk-ray-parallel" class="rounded bg-slate-700 border-slate-600 text-red-600 focus:ring-red-500 w-4 h-4">
+                <span>Rayon // axe</span>
+            </label>
+
+            <label class="flex items-center space-x-2 cursor-pointer hover:text-emerald-300 transition">
+                <input type="checkbox" id="chk-ray-center" class="rounded bg-slate-700 border-slate-600 text-emerald-600 focus:ring-emerald-500 w-4 h-4">
+                <span>Rayon passant par O</span>
+            </label>
+
+            <label class="flex items-center space-x-2 cursor-pointer hover:text-purple-300 transition">
+                <input type="checkbox" id="chk-ray-focal" class="rounded bg-slate-700 border-slate-600 text-purple-600 focus:ring-purple-500 w-4 h-4">
+                <span>Rayon passant par F</span>
+            </label>
+
+            <label class="flex items-center space-x-2 cursor-pointer hover:text-amber-300 transition border-l border-slate-700 pl-4">
+                <input type="checkbox" id="chk-show-values" class="rounded bg-slate-700 border-slate-600 text-amber-500 focus:ring-amber-500 w-4 h-4">
+                <span class="font-semibold text-amber-300">Afficher calculs</span>
+            </label>
+        </div>
+
+        <button id="btn-autofocus" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-semibold shadow transition flex items-center gap-1.5 ml-auto">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+            Ajuster la courbure pour A' sur C (Autofocus)
+        </button>
+    </footer>
+
+    <script>
+        // Fixed distance Lens to Sensor C (OC = 62.5 mm fixed)
+        const FIXED_OC = 62.5; 
+        const SENSOR_HALF_HEIGHT_PX = 85; // Fixed sensor height radius (170px total) on optical bench
+
+        const state = {
+            OA: -250.0,         // Distance from Lens O to Object A (negative)
+            AB: 50.0,           // Height of Object AB (positive)
+            focalLength: 50.0,  // Variable focal length f' (Liquid Lens)
+            isInfinity: false,
+            showParallel: false,
+            showCenter: false,
+            showFocal: false,
+            showValues: false    // Toggle display of calculated values
+        };
+
+        // DOM References
+        const opticsCanvas = document.getElementById('optics-canvas');
+        const opticsCtx = opticsCanvas.getContext('2d');
+        const lcdCanvas = document.getElementById('lcd-canvas');
+        const lcdCtx = lcdCanvas.getContext('2d');
+
+        const sliderOA = document.getElementById('slider-oa');
+        const sliderFocal = document.getElementById('slider-focal');
+        const sliderAB = document.getElementById('slider-ab');
+
+        const valOA = document.getElementById('val-oa');
+        const valFocal = document.getElementById('val-focal');
+        const valAB = document.getElementById('val-ab');
+
+        const algebraicPanel = document.getElementById('algebraic-panel');
+        const dispOA = document.getElementById('disp-oa');
+        const dispAB = document.getElementById('disp-ab');
+        const dispOAP = document.getElementById('disp-oap');
+        const dispABP = document.getElementById('disp-abp');
+        const focusIndicator = document.getElementById('focus-indicator');
+
+        const chkInf = document.getElementById('chk-inf');
+        const chkParallel = document.getElementById('chk-ray-parallel');
+        const chkCenter = document.getElementById('chk-ray-center');
+        const chkFocal = document.getElementById('chk-ray-focal');
+        const chkShowValues = document.getElementById('chk-show-values');
+        const btnAutofocus = document.getElementById('btn-autofocus');
+
+        // Conjugation formula calculations (1/OA' - 1/OA = 1/f')
+        function getOpticsCalculations() {
+            let f = state.focalLength;
+            let OA = state.isInfinity ? -1e8 : state.OA;
+            let AB = state.isInfinity ? 500 : state.AB;
+
+            // Theoretical image position relative to lens O: OA' = (OA * f') / (OA + f')
+            let OAP_th = state.isInfinity ? f : (OA * f) / (OA + f);
+            let gamma = state.isInfinity ? 0 : (OAP_th / OA);
+            let ABP_th = state.isInfinity ? -10 : (gamma * AB);
+
+            return { OA, AB, OAP_th, ABP_th, gamma, f };
+        }
+
+        // Update UI Text Display
+        function updateUI() {
+            const calc = getOpticsCalculations();
+
+            if (state.isInfinity) {
+                dispOA.textContent = "-\u221E mm";
+                dispAB.textContent = "+\u221E mm";
+                dispOAP.textContent = `+${calc.f.toFixed(1)} mm`;
+                dispABP.textContent = "0.0 mm";
+                valOA.textContent = "-\u221E (Infini)";
+            } else {
+                dispOA.textContent = `${calc.OA.toFixed(1)} mm`;
+                dispAB.textContent = `+${calc.AB.toFixed(1)} mm`;
+                dispOAP.textContent = `+${calc.OAP_th.toFixed(1)} mm`;
+                dispABP.textContent = `${calc.ABP_th.toFixed(1)} mm`;
+                valOA.textContent = `${state.OA.toFixed(0)} mm`;
+            }
+
+            valFocal.textContent = `+${state.focalLength.toFixed(1)} mm`;
+            valAB.textContent = `+${state.AB.toFixed(0)} mm`;
+
+            // Toggle visibility of the algebraic values panel
+            if (state.showValues) {
+                algebraicPanel.classList.remove('hidden');
+            } else {
+                algebraicPanel.classList.add('hidden');
+            }
+
+            // Focus precision evaluation between Fixed Sensor C position (FIXED_OC) and theoretical image A' (OA')
+            let error = Math.abs(FIXED_OC - calc.OAP_th);
+            if (error < 0.8) {
+                focusIndicator.textContent = "Mise au point NETTE";
+                focusIndicator.className = "text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+            } else if (error < 3.5) {
+                focusIndicator.textContent = "Légèrement Flou";
+                focusIndicator.className = "text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30";
+            } else {
+                focusIndicator.textContent = "Image Floue";
+                focusIndicator.className = "text-[10px] font-bold px-2 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30";
+            }
+        }
+
+        // --- Render Optics Canvas Bench ---
+        function drawOpticsBench() {
+            const w = opticsCanvas.width;
+            const h = opticsCanvas.height;
+            opticsCtx.clearRect(0, 0, w, h);
+
+            const calc = getOpticsCalculations();
+            const { OAP_th, ABP_th, f } = calc;
+
+            // Optical Bench Coordinate system:
+            // Fixed Sensor C is pinned at a fixed position on bench
+            const sensorX = w * 0.68; 
+            const centerY = h * 0.50;
+            const scaleX = w / 650;   // Horizontal scale
+            const scaleY = 2.8;       // Vertical scale
+
+            // Position of Lens O fixed at FIXED_OC distance from Sensor C
+            const centerX = sensorX - (FIXED_OC * scaleX);
+
+            // Optical Axis
+            opticsCtx.strokeStyle = '#64748b';
+            opticsCtx.lineWidth = 1.5;
+            opticsCtx.beginPath();
+            opticsCtx.moveTo(20, centerY);
+            opticsCtx.lineTo(w - 20, centerY);
+            opticsCtx.stroke();
+
+            // Optical Axis Arrowhead
+            opticsCtx.beginPath();
+            opticsCtx.moveTo(w - 25, centerY - 5);
+            opticsCtx.lineTo(w - 15, centerY);
+            opticsCtx.lineTo(w - 25, centerY + 5);
+            opticsCtx.stroke();
+
+            // Focal points relative to Lens O
+            const Fx = centerX - (f * scaleX);
+            const Fpx = centerX + (f * scaleX);
+
+            // Converging Lens O (Liquid Lens representation)
+            const lensH = h * 0.80;
+            
+            // Dynamic curvature calculation based on focal length (shorter focal length = more convex/curved)
+            const curveOffset = Math.max(4, Math.min(25, (70 - f) * 0.5));
+
+            opticsCtx.fillStyle = 'rgba(56, 189, 248, 0.25)';
+            opticsCtx.strokeStyle = '#38bdf8';
+            opticsCtx.lineWidth = 2.5;
+
+            // Draw curved biconvex liquid lens shape
+            opticsCtx.beginPath();
+            opticsCtx.moveTo(centerX, centerY - lensH / 2);
+            opticsCtx.quadraticCurveTo(centerX + curveOffset, centerY, centerX, centerY + lensH / 2);
+            opticsCtx.quadraticCurveTo(centerX - curveOffset, centerY, centerX, centerY - lensH / 2);
+            opticsCtx.closePath();
+            opticsCtx.fill();
+            opticsCtx.stroke();
+
+            // Center optical line for reference
+            opticsCtx.strokeStyle = 'rgba(56, 189, 248, 0.5)';
+            opticsCtx.lineWidth = 1;
+            opticsCtx.setLineDash([4, 4]);
+            opticsCtx.beginPath();
+            opticsCtx.moveTo(centerX, centerY - lensH / 2);
+            opticsCtx.lineTo(centerX, centerY + lensH / 2);
+            opticsCtx.stroke();
+            opticsCtx.setLineDash([]);
+
+            // Converging Lens Arrows
+            const arrS = 9;
+            opticsCtx.strokeStyle = '#38bdf8';
+            opticsCtx.lineWidth = 3.5;
+            opticsCtx.beginPath();
+            opticsCtx.moveTo(centerX - arrS, centerY - lensH / 2 + arrS);
+            opticsCtx.lineTo(centerX, centerY - lensH / 2);
+            opticsCtx.lineTo(centerX + arrS, centerY - lensH / 2 + arrS);
+            opticsCtx.moveTo(centerX - arrS, centerY + lensH / 2 - arrS);
+            opticsCtx.lineTo(centerX, centerY + lensH / 2);
+            opticsCtx.lineTo(centerX + arrS, centerY + lensH / 2 - arrS);
+            opticsCtx.stroke();
+
+            // Camera Body Outline (Fixed camera housing around sensor)
+            const cameraH = 210;
+            opticsCtx.save();
+            opticsCtx.strokeStyle = '#475569';
+            opticsCtx.fillStyle = 'rgba(15, 23, 42, 0.4)';
+            opticsCtx.lineWidth = 2;
+            opticsCtx.beginPath();
+            let cameraLeft = Math.min(centerX - 10, sensorX - 120);
+            opticsCtx.roundRect(cameraLeft, centerY - cameraH / 2, (sensorX - cameraLeft) + 40, cameraH, 12);
+            opticsCtx.fill();
+            opticsCtx.stroke();
+            opticsCtx.restore();
+
+            // Fixed Sensor Line (Capteur C) - Fixed Height 170px (±85px)
+            opticsCtx.strokeStyle = '#ef4444';
+            opticsCtx.lineWidth = 3.5;
+            opticsCtx.beginPath();
+            opticsCtx.moveTo(sensorX, centerY - SENSOR_HALF_HEIGHT_PX);
+            opticsCtx.lineTo(sensorX, centerY + SENSOR_HALF_HEIGHT_PX);
+            opticsCtx.stroke();
+
+            // Capteur C Label
+            opticsCtx.fillStyle = '#f87171';
+            opticsCtx.font = 'bold 13px Inter';
+            opticsCtx.fillText('Capteur C', sensorX - 28, centerY + SENSOR_HALF_HEIGHT_PX + 18);
+
+            // Center O Label
+            opticsCtx.fillStyle = '#e2e8f0';
+            opticsCtx.font = 'bold 14px Inter';
+            opticsCtx.fillText('O', centerX - 6, centerY + 22);
+
+            // Focal Points Labels
+            opticsCtx.fillStyle = '#c084fc';
+            opticsCtx.fillRect(Fx - 3, centerY - 3, 6, 6);
+            opticsCtx.fillText('F', Fx - 4, centerY + 22);
+
+            opticsCtx.fillRect(Fpx - 3, centerY - 3, 6, 6);
+            opticsCtx.fillText("F'", Fpx - 4, centerY + 22);
+
+            // Object AB Coordinates
+            let Ax = centerX + (state.OA * scaleX);
+            let Ay = centerY;
+            let Bx = Ax;
+            let By = centerY - (state.AB * scaleY);
+
+            // Draw Object AB
+            if (!state.isInfinity) {
+                drawArrow(opticsCtx, Ax, Ay, Bx, By, '#3b82f6', 3.5);
+                
+                opticsCtx.fillStyle = '#60a5fa';
+                opticsCtx.font = 'bold 14px Inter';
+                opticsCtx.fillText('A', Ax - 16, Ay + 20);
+                opticsCtx.fillText('B', Bx - 16, By - 8);
+
+                // Figurine standing UPRIGHT at point A with head at point B
+                drawFigurine(opticsCtx, Ax, Ay, state.AB * scaleY, false);
+            }
+
+            // Theoretical Image A'B' Coordinates
+            let Apx = centerX + (OAP_th * scaleX);
+            let Apy = centerY;
+            let Bpx = Apx;
+            let Bpy = centerY - (ABP_th * scaleY);
+
+            // Draw Theoretical Image A'B'
+            if (!state.isInfinity && isFinite(OAP_th)) {
+                drawArrow(opticsCtx, Apx, Apy, Bpx, Bpy, '#f59e0b', 3.5);
+
+                opticsCtx.fillStyle = '#fbbf24';
+                opticsCtx.font = 'bold 14px Inter';
+                opticsCtx.fillText("A'", Apx + 8, Apy + (ABP_th < 0 ? -10 : 20));
+                opticsCtx.fillText("B'", Bpx + 8, Bpy + (ABP_th < 0 ? 20 : -8));
+
+                // Image Figurine INVERTED (feet at A' on optical axis, head at B' pointing down)
+                drawFigurine(opticsCtx, Apx, Apy, Math.abs(ABP_th) * scaleY, true);
+            }
+
+            // --- Ray Tracing ---
+            if (!state.isInfinity) {
+                // Ray 1: Parallel to axis -> Passes through F' and intersects B'
+                if (state.showParallel) {
+                    opticsCtx.strokeStyle = '#ef4444';
+                    opticsCtx.lineWidth = 2;
+                    opticsCtx.beginPath();
+                    opticsCtx.moveTo(Bx, By);
+                    opticsCtx.lineTo(centerX, By);
+                    let slope = (Bpy - By) / (Bpx - centerX);
+                    let endX = w - 20;
+                    let endY = By + slope * (endX - centerX);
+                    opticsCtx.lineTo(endX, endY);
+                    opticsCtx.stroke();
+                }
+
+                // Ray 2: Passing through center O -> Undeviated through B'
+                if (state.showCenter) {
+                    opticsCtx.strokeStyle = '#10b981';
+                    opticsCtx.lineWidth = 2;
+                    opticsCtx.beginPath();
+                    opticsCtx.moveTo(Bx, By);
+                    let slope = (Bpy - By) / (Bpx - Bx);
+                    let endX = w - 20;
+                    let endY = By + slope * (endX - Bx);
+                    opticsCtx.lineTo(endX, endY);
+                    opticsCtx.stroke();
+                }
+
+                // Ray 3: Passing through F -> Emerges parallel through B'
+                if (state.showFocal) {
+                    opticsCtx.strokeStyle = '#a855f7';
+                    opticsCtx.lineWidth = 2;
+                    opticsCtx.beginPath();
+                    opticsCtx.moveTo(Bx, By);
+                    let slopeF = (centerY - By) / (Fx - Bx);
+                    let lensY = By + slopeF * (centerX - Bx);
+                    opticsCtx.lineTo(centerX, lensY);
+                    opticsCtx.lineTo(w - 20, lensY);
+                    opticsCtx.stroke();
+                }
+            } else {
+                // Parallel rays for object at infinity
+                if (state.showParallel || state.showCenter) {
+                    opticsCtx.strokeStyle = '#38bdf8';
+                    opticsCtx.lineWidth = 1.8;
+                    [-40, -20, 0, 20, 40].forEach(offset => {
+                        opticsCtx.beginPath();
+                        opticsCtx.moveTo(20, centerY + offset);
+                        opticsCtx.lineTo(centerX, centerY + offset);
+                        opticsCtx.lineTo(Fpx, centerY);
+                        opticsCtx.lineTo(w - 20, centerY - (offset * 0.4));
+                        opticsCtx.stroke();
+                    });
+                }
+            }
+        }
+
+        // Helper Arrow Renderer
+        function drawArrow(ctx, fromx, fromy, tox, toy, color, width) {
+            const headlen = 10;
+            const angle = Math.atan2(toy - fromy, tox - fromx);
+            ctx.strokeStyle = color;
+            ctx.fillStyle = color;
+            ctx.lineWidth = width;
+            ctx.beginPath();
+            ctx.moveTo(fromx, fromy);
+            ctx.lineTo(tox, toy);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(tox, toy);
+            ctx.lineTo(tox - headlen * Math.cos(angle - Math.PI / 6), toy - headlen * Math.sin(angle - Math.PI / 6));
+            ctx.lineTo(tox - headlen * Math.cos(angle + Math.PI / 6), toy - headlen * Math.sin(angle + Math.PI / 6));
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        // Figurine Graphics Renderer aligned with base at baselineY extending vertically by height
+        function drawFigurine(ctx, x, baselineY, height, isInverted = false) {
+            ctx.save();
+            ctx.translate(x - height * 0.22, baselineY);
+            let s = height / 55; // Scale factor
+            
+            if (isInverted) {
+                ctx.translate(0, height);
+                ctx.scale(s, -s);
+            } else {
+                ctx.translate(0, -height);
+                ctx.scale(s, s);
+            }
+
+            // Body / Outfit
+            ctx.fillStyle = '#2563eb'; // Blue body
+            ctx.fillRect(4, 18, 16, 22);
+            ctx.fillStyle = '#dc2626'; // Red cape
+            ctx.fillRect(0, 18, 4, 24);
+            ctx.fillRect(20, 18, 4, 24);
+            
+            // Legs
+            ctx.fillStyle = '#1e3a8a';
+            ctx.fillRect(5, 40, 6, 15);
+            ctx.fillRect(13, 40, 6, 15);
+
+            // Head
+            ctx.fillStyle = '#fde047';
+            ctx.beginPath();
+            ctx.arc(12, 10, 8, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Hair
+            ctx.fillStyle = '#0f172a';
+            ctx.beginPath();
+            ctx.arc(12, 8, 8, Math.PI, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        // --- Render LCD Sensor Viewfinder ---
+        function drawLCDPreview() {
+            const w = lcdCanvas.width;
+            const h = lcdCanvas.height;
+            lcdCtx.clearRect(0, 0, w, h);
+
+            const calc = getOpticsCalculations();
+            const { OAP_th, ABP_th } = calc;
+
+            // Optical blur radius based on distance mismatch |OC_fixed - OA'|
+            let focusError = Math.abs(FIXED_OC - OAP_th);
+            let blurRadius = Math.min(focusError * 2.2, 22);
+
+            lcdCtx.save();
+            
+            // Dark LCD background
+            lcdCtx.fillStyle = '#050b14';
+            lcdCtx.fillRect(0, 0, w, h);
+
+            // SVG blur filter
+            if (blurRadius > 0.4) {
+                lcdCtx.filter = `blur(${blurRadius.toFixed(1)}px)`;
+            } else {
+                lcdCtx.filter = 'none';
+            }
+
+            const centerX = w / 2;
+            const centerY = h / 2;
+
+            if (state.isInfinity) {
+                // Point source preview for infinite distance
+                lcdCtx.fillStyle = '#38bdf8';
+                lcdCtx.beginPath();
+                lcdCtx.arc(centerX, centerY, 8, 0, Math.PI * 2);
+                lcdCtx.fill();
+            } else {
+                // Scale match ratio: Height on LCD matches (A'B' height in px) / (Total Sensor height in px) * LCD Canvas Height
+                const scaleY = 2.8; 
+                let imgHeightBenchPx = Math.abs(ABP_th) * scaleY;
+                let renderH = (imgHeightBenchPx / (SENSOR_HALF_HEIGHT_PX * 2)) * h;
+
+                lcdCtx.save();
+                // Draw inverted figurine starting from optical axis (centerY) going downwards
+                drawFigurine(lcdCtx, centerX, centerY, renderH, true);
+                lcdCtx.restore();
+            }
+
+            lcdCtx.restore();
+
+            // Overlay Focus Frame Target
+            lcdCtx.save();
+            lcdCtx.filter = 'none';
+            lcdCtx.strokeStyle = focusError < 0.8 ? '#10b981' : (focusError < 3.5 ? '#f59e0b' : '#ef4444');
+            lcdCtx.lineWidth = 2;
+            lcdCtx.beginPath();
+            lcdCtx.roundRect(centerX - 35, centerY - 35, 70, 70, 8);
+            lcdCtx.stroke();
+            lcdCtx.restore();
+        }
+
+        // Resize Canvas dynamically
+        function handleResize() {
+            const opticsRect = opticsCanvas.parentElement.getBoundingClientRect();
+            opticsCanvas.width = opticsRect.width;
+            opticsCanvas.height = opticsRect.height;
+
+            const lcdRect = lcdCanvas.parentElement.getBoundingClientRect();
+            lcdCanvas.width = lcdRect.width;
+            lcdCanvas.height = lcdRect.height;
+
+            render();
+        }
+
+        function render() {
+            updateUI();
+            drawOpticsBench();
+            drawLCDPreview();
+        }
+
+        // --- Event Listeners ---
+        sliderOA.addEventListener('input', (e) => {
+            state.OA = parseFloat(e.target.value);
+            render();
+        });
+
+        sliderFocal.addEventListener('input', (e) => {
+            state.focalLength = parseFloat(e.target.value);
+            render();
+        });
+
+        sliderAB.addEventListener('input', (e) => {
+            state.AB = parseFloat(e.target.value);
+            render();
+        });
+
+        chkInf.addEventListener('change', (e) => {
+            state.isInfinity = e.target.checked;
+            sliderOA.disabled = state.isInfinity;
+            sliderAB.disabled = state.isInfinity;
+            render();
+        });
+
+        chkParallel.addEventListener('change', (e) => { state.showParallel = e.target.checked; render(); });
+        chkCenter.addEventListener('change', (e) => { state.showCenter = e.target.checked; render(); });
+        chkFocal.addEventListener('change', (e) => { state.showFocal = e.target.checked; render(); });
+
+        chkShowValues.addEventListener('change', (e) => {
+            state.showValues = e.target.checked;
+            render();
+        });
+
+        btnAutofocus.addEventListener('click', () => {
+            let OA = state.isInfinity ? -1e8 : state.OA;
+            // Solve for f' such that OA' = FIXED_OC (62.5 mm):
+            // 1/f' = 1/OA' - 1/OA => f' = (OA * FIXED_OC) / (OA + FIXED_OC)
+            let requiredFocal = (OA * FIXED_OC) / (OA + FIXED_OC);
+            
+            // Clamp within slider limits [30, 60]
+            state.focalLength = Math.max(30, Math.min(60, requiredFocal));
+            sliderFocal.value = state.focalLength;
+            render();
+        });
+
+        window.addEventListener('resize', handleResize);
+        window.addEventListener('load', handleResize);
+    </script>
+</body>
+</html>
