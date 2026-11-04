@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulation Lunette Astronomique - Physique</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; flex-direction: column; align-items: center; background-color: #fafafa; margin: 0; padding: 20px; }
+        h1 { margin-bottom: 15px; color: #333; font-size: 1.8rem; text-align: center; }
+        
+        #toolbar { background: white; padding: 15px 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); margin-bottom: 20px; display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 15px; max-width: 1150px; width: 100%; box-sizing: border-box; }
+
+        .val-card { background: #f8f9fa; border: 1px solid #e2e8f0; padding: 8px 14px; border-radius: 8px; text-align: center; font-weight: bold; font-size: 1.05rem; white-space: nowrap; }
+        .val-highlight-2 { color: #2980b9; }
+
+        .control-group { display: flex; flex-direction: column; flex: 1; min-width: 120px; }
+        .control-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+        label { font-weight: 600; font-size: 0.88rem; color: #555; white-space: nowrap; }
+        .label-value { font-weight: bold; color: #2c3e50; font-size: 0.95rem; }
+        input[type=range] { width: 100%; cursor: pointer; }
+
+        .checkbox-group { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+        .checkbox-group input { cursor: pointer; width: 16px; height: 16px; }
+        .checkbox-group label { cursor: pointer; font-weight: 600; font-size: 0.88rem; color: #333; }
+
+        #canvas-container { position: relative; background: white; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); overflow: hidden; border: 1px solid #eee; }
+        canvas { display: block; }
+
+        /* Style de la boîte des calculs et éléments masqués */
+        #groupRay2Height, #calc-box {
+            display: none;
+        }
+
+        #calc-box {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            padding: 15px 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 0.95rem;
+            color: #2c3e50;
+            min-width: 240px;
+            backdrop-filter: blur(4px);
+        }
+
+        .calc-row {
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 1.05rem;
+        }
+
+        .calc-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .fraction {
+            display: inline-flex;
+            flex-direction: column;
+            vertical-align: middle;
+            text-align: center;
+            padding: 0 4px;
+        }
+
+        .fraction .num {
+            border-bottom: 1px solid #2c3e50;
+            padding-bottom: 1px;
+        }
+
+        .fraction .den {
+            padding-top: 1px;
+        }
+
+        .calc-val {
+            font-weight: bold;
+            color: #d35400;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Lunette Astronomique Afocale</h1>
+
+    <div id="toolbar">
+        <div class="control-group">
+            <div class="control-header">
+                <label for="rangeAlpha">Angle α</label>
+                <span class="label-value" id="valAlphaInput">7.0°</span>
+            </div>
+            <input type="range" id="rangeAlpha" min="1.0" max="12.0" step="0.5" value="7.0">
+        </div>
+
+        <div class="control-group">
+            <div class="control-header">
+                <label for="rangeF1">Focale Objectif f'₁</label>
+                <span class="label-value" id="valF1">20 cm</span>
+            </div>
+            <input type="range" id="rangeF1" min="15" max="35" step="1" value="20">
+        </div>
+
+        <div class="control-group">
+            <div class="control-header">
+                <label for="rangeF2">Focale Oculaire f'₂</label>
+                <span class="label-value" id="valF2">10 cm</span>
+            </div>
+            <input type="range" id="rangeF2" min="5" max="15" step="1" value="10">
+        </div>
+
+        <div class="checkbox-group">
+            <input type="checkbox" id="checkRay2">
+            <label for="checkRay2">2ᵉ rayon</label>
+        </div>
+
+        <div class="control-group" id="groupRay2Height">
+            <div class="control-header">
+                <label for="rangeRay2Height">Hauteur 2ᵉ rayon</label>
+            </div>
+            <input type="range" id="rangeRay2Height" min="-100" max="100" step="5" value="40">
+        </div>
+
+        <div class="checkbox-group">
+            <input type="checkbox" id="checkCalc">
+            <label for="checkCalc">Calculs de G</label>
+        </div>
+
+        <div class="val-card">
+            α' (image) = <span id="valAlphaPrime" class="val-highlight-2">0.0</span>°
+        </div>
+    </div>
+
+    <div id="canvas-container">
+        <canvas id="opticalBench" width="1150" height="700"></canvas>
+        
+        <!-- Fenêtres d'affichage des calculs (masquée par défaut) -->
+        <div id="calc-box">
+            <div class="calc-row">
+                <span>G =</span>
+                <div class="fraction">
+                    <span class="num">f'₁</span>
+                    <span class="den">f'₂</span>
+                </div>
+                <span>=</span>
+                <div class="fraction">
+                    <span class="num" id="calcF1">20</span>
+                    <span class="den" id="calcF2">10</span>
+                </div>
+                <span>= <span id="calcGFoc" class="calc-val">2.0</span></span>
+            </div>
+
+            <hr style="border:0; border-top:1px solid #cbd5e1; margin: 10px 0;">
+
+            <div class="calc-row">
+                <span>G =</span>
+                <div class="fraction">
+                    <span class="num">α'</span>
+                    <span class="den">α</span>
+                </div>
+                <span>=</span>
+                <div class="fraction">
+                    <span class="num"><span id="calcAlphaPrime">14.0</span></span>
+                    <span class="den"><span id="calcAlpha">7.0</span></span>
+                </div>
+                <span>= <span id="calcGAngle" class="calc-val">2.0</span></span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('opticalBench');
+        const ctx = canvas.getContext('2d');
+        
+        const rangeAlpha = document.getElementById('rangeAlpha');
+        const rangeF1 = document.getElementById('rangeF1');
+        const rangeF2 = document.getElementById('rangeF2');
+        const checkRay2 = document.getElementById('checkRay2');
+        const groupRay2Height = document.getElementById('groupRay2Height');
+        const rangeRay2Height = document.getElementById('rangeRay2Height');
+        const checkCalc = document.getElementById('checkCalc');
+        
+        const valAlphaInput = document.getElementById('valAlphaInput');
+        const valF1 = document.getElementById('valF1');
+        const valF2 = document.getElementById('valF2');
+        const valAlphaPrime = document.getElementById('valAlphaPrime');
+
+        const calcBox = document.getElementById('calc-box');
+        const calcF1 = document.getElementById('calcF1');
+        const calcF2 = document.getElementById('calcF2');
+        const calcGFoc = document.getElementById('calcGFoc');
+        const calcAlphaPrime = document.getElementById('calcAlphaPrime');
+        const calcAlpha = document.getElementById('calcAlpha');
+        const calcGAngle = document.getElementById('calcGAngle');
+
+        let f1_cm = 20;
+        let f2_cm = 10;
+        let alphaDeg = 7.0;
+        let ray2Offset = 40;
+        const PXL_PER_CM = 15; 
+        const centerY = 350; 
+        const xO1_px = 180; 
+
+        rangeAlpha.addEventListener('input', () => {
+            alphaDeg = parseFloat(rangeAlpha.value);
+            valAlphaInput.innerText = alphaDeg.toFixed(1) + "°";
+            updateAndDraw();
+        });
+
+        rangeF1.addEventListener('input', () => {
+            f1_cm = parseInt(rangeF1.value);
+            updateAndDraw();
+        });
+
+        rangeF2.addEventListener('input', () => {
+            f2_cm = parseInt(rangeF2.value);
+            updateAndDraw();
+        });
+
+        checkRay2.addEventListener('change', () => {
+            if (checkRay2.checked) {
+                groupRay2Height.style.display = 'flex';
+            } else {
+                groupRay2Height.style.display = 'none';
+            }
+            draw();
+        });
+
+        rangeRay2Height.addEventListener('input', () => {
+            ray2Offset = parseInt(rangeRay2Height.value);
+            draw();
+        });
+
+        checkCalc.addEventListener('change', () => {
+            if (checkCalc.checked) {
+                calcBox.style.display = 'block';
+            } else {
+                calcBox.style.display = 'none';
+            }
+        });
+
+        function updateAndDraw() {
+            valF1.innerText = f1_cm + " cm";
+            valF2.innerText = f2_cm + " cm";
+            draw();
+        }
+
+        function drawDoubleArrow(x1, x2, y, label) {
+            ctx.strokeStyle = '#34495e';
+            ctx.fillStyle = '#34495e';
+            ctx.lineWidth = 1.5;
+
+            ctx.beginPath();
+            ctx.moveTo(x1, y);
+            ctx.lineTo(x2, y);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(x1, y);
+            ctx.lineTo(x1 + 8, y - 5);
+            ctx.lineTo(x1 + 8, y + 5);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.moveTo(x2, y);
+            ctx.lineTo(x2 - 8, y - 5);
+            ctx.lineTo(x2 - 8, y + 5);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.font = 'bold 18px sans-serif';
+            let midX = (x1 + x2) / 2;
+            let textWidth = ctx.measureText(label).width;
+            ctx.fillText(label, midX - textWidth / 2, y - 10);
+        }
+
+        function drawRayArrow(x1, y1, x2, y2, color, posRatio = 0.5) {
+            let mx = x1 + (x2 - x1) * posRatio;
+            let my = y1 + (y2 - y1) * posRatio;
+            let angle = Math.atan2(y2 - y1, x2 - x1);
+            let arrowLength = 9;
+
+            ctx.save();
+            ctx.fillStyle = color;
+            ctx.strokeStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(mx, my);
+            ctx.lineTo(mx - arrowLength * Math.cos(angle - Math.PI / 6), my - arrowLength * Math.sin(angle - Math.PI / 6));
+            ctx.lineTo(mx - arrowLength * Math.cos(angle + Math.PI / 6), my - arrowLength * Math.sin(angle + Math.PI / 6));
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
+
+        function drawLens(x, labelName, maxRayDistance) {
+            const lensHalfH = Math.min(canvas.height / 2 - 30, Math.max(180, maxRayDistance + 30)); 
+
+            ctx.fillStyle = 'rgba(44, 62, 80, 0.1)';
+            ctx.strokeStyle = '#2c3e50';
+            ctx.lineWidth = 2;
+            
+            ctx.beginPath();
+            ctx.moveTo(x - 12, centerY - lensHalfH + 20);
+            ctx.lineTo(x + 12, centerY - lensHalfH + 20);
+            ctx.lineTo(x, centerY - lensHalfH);
+            ctx.closePath();
+            ctx.fill(); ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(x - 12, centerY + lensHalfH - 20);
+            ctx.lineTo(x + 12, centerY + lensHalfH - 20);
+            ctx.lineTo(x, centerY + lensHalfH);
+            ctx.closePath();
+            ctx.fill(); ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(x, centerY - lensHalfH);
+            ctx.lineTo(x, centerY + lensHalfH);
+            ctx.stroke();
+
+            ctx.font = 'bold 16px sans-serif';
+            ctx.fillStyle = '#2c3e50';
+            ctx.textAlign = 'center';
+			ctx.fillText(labelName, x, centerY - lensHalfH - 12);
+			ctx.textAlign = 'start'; // Réinitialisation pour ne pas impacter les autres textes
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const f1_px = f1_cm * PXL_PER_CM;
+            const f2_px = f2_cm * PXL_PER_CM;
+            
+            const alphaRad = alphaDeg * (Math.PI / 180);
+            const objH_px = f1_px * alphaRad; // Approximation paraxiale pour cohérence exacte
+
+            const xF1_px = xO1_px - f1_px;
+            const xF1_prime_px = xO1_px + f1_px; 
+            const xO2_px = xO1_px + f1_px + f2_px;
+            const xF2_prime_px = xO2_px + f2_px;
+
+            const yB_prime_px = centerY + objH_px;
+            const alphaPrimeDeg = alphaDeg * (f1_cm / f2_cm);
+            const alphaPrimeRad = alphaPrimeDeg * (Math.PI / 180);
+
+            valAlphaPrime.innerText = alphaPrimeDeg.toFixed(1);
+
+            let gFoc = f1_cm / f2_cm;
+            let gAngle = alphaPrimeDeg / alphaDeg;
+
+            calcF1.innerText = f1_cm;
+            calcF2.innerText = f2_cm;
+            calcGFoc.innerText = gFoc.toFixed(1);
+
+            calcAlphaPrime.innerText = alphaPrimeDeg.toFixed(1);
+            calcAlpha.innerText = alphaDeg.toFixed(1);
+            calcGAngle.innerText = gAngle.toFixed(1);
+
+            let startX = 20;
+
+            let yOnLens1_O1 = centerY - Math.min(100, 220 / (1 + alphaRad)); 
+            let slopeRed = (yB_prime_px - yOnLens1_O1) / (xF1_prime_px - xO1_px);
+            let yImpactO2_Ray1 = yB_prime_px + slopeRed * (xO2_px - xF1_prime_px);
+
+            let yOnLens2_O1 = centerY + ray2Offset;
+            let slopeOrange = (yB_prime_px - yOnLens2_O1) / (xF1_prime_px - xO1_px);
+            let yImpactO2_Ray2 = checkRay2.checked ? (yB_prime_px + slopeOrange * (xO2_px - xF1_prime_px)) : yImpactO2_Ray1;
+
+            let maxDistO1 = Math.abs(yOnLens1_O1 - centerY);
+            if (checkRay2.checked) {
+                maxDistO1 = Math.max(maxDistO1, Math.abs(yOnLens2_O1 - centerY));
+            }
+            let maxDistO2 = Math.max(Math.abs(yImpactO2_Ray1 - centerY), Math.abs(yImpactO2_Ray2 - centerY));
+
+            // Axe optique principal
+            ctx.strokeStyle = '#777';
+			ctx.lineWidth = 1.2;
+			ctx.setLineDash([6, 4]);
+			ctx.beginPath();
+			ctx.moveTo(20, centerY);
+			ctx.lineTo(canvas.width - 20, centerY);
+			ctx.stroke();
+			ctx.setLineDash([]);
+
+			// Libellé de l'axe optique
+			ctx.font = 'italic bold 15px sans-serif';
+			ctx.fillStyle = '#777';
+			ctx.textAlign = 'right';
+			ctx.fillText("Axe optique(Δ)", canvas.width - 25, centerY + 20); // Placé au-dessus du début de l'axe à gauche
+			ctx.textAlign = 'start'; // Réinitialisation
+
+            function drawTick(x, label) {
+				ctx.strokeStyle = '#444';
+				ctx.lineWidth = 1.5;
+				ctx.beginPath();
+				ctx.moveTo(x, centerY - 6);
+				ctx.lineTo(x, centerY + 6);
+				ctx.stroke();
+				
+				if (label) {
+					ctx.font = 'bold 18px sans-serif';
+					ctx.fillStyle = '#444';
+					ctx.textAlign = 'center'; // Centre le texte horizontalement sur x
+					ctx.fillText(label, x, centerY - 12);
+					ctx.textAlign = 'start';  // Réinitialise l'alignement pour le reste du dessin
+				}
+			}
+            drawTick(xF1_px, "F₁");
+            drawTick(xF1_prime_px, "F'₁ ≡ F₂");
+            drawTick(xF2_prime_px, "F'₂");
+
+			// --- Plan focal image (Objectif) ---
+			ctx.strokeStyle = '#27ae60'; // Couleur verte assortie à A'B'
+			ctx.lineWidth = 1;
+			ctx.setLineDash([4, 4]); // Pointillés
+
+			// 1. Tracé de la ligne verticale passant par F'1
+			ctx.beginPath();
+			ctx.moveTo(xF1_prime_px, 100); // Début en haut (sous la barre d'outils)
+			ctx.lineTo(xF1_prime_px, canvas.height - 140); // Fin en bas
+			ctx.stroke();
+			ctx.setLineDash([]); // Réinitialisation des pointillés
+
+			// 2. Libellé en bas du plan focal
+			ctx.font = 'italic bold 15px sans-serif';
+			ctx.fillStyle = '#27ae60';
+			ctx.textAlign = 'center';
+			ctx.fillText("Plan focal image (L₁)", xF1_prime_px, canvas.height - 120);
+			ctx.textAlign = 'start'; // Réinitialisation de l'alignement
+
+            // Image intermédiaire A'B'
+            ctx.strokeStyle = '#27ae60';
+            ctx.fillStyle = '#27ae60';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(xF1_prime_px, centerY);
+            ctx.lineTo(xF1_prime_px, yB_prime_px);
+            ctx.stroke();
+            
+            ctx.beginPath();
+            ctx.moveTo(xF1_prime_px - 5, yB_prime_px - 10);
+            ctx.lineTo(xF1_prime_px, yB_prime_px);
+            ctx.lineTo(xF1_prime_px + 5, yB_prime_px - 10);
+            ctx.fill();
+
+            ctx.font = 'bold 16px sans-serif';
+            ctx.fillText("A'", xF1_prime_px + 5, centerY + 15);
+            ctx.fillText("B'", xF1_prime_px - 5, yB_prime_px + 20);
+
+            // Cotations
+            drawDoubleArrow(xO1_px, xF1_prime_px, 60, "f'₁ = " + f1_cm + " cm");
+            drawDoubleArrow(xF1_prime_px, xO2_px, 60, "f₂ = " + f2_cm + " cm");
+
+            // Dessin dynamique des lentilles
+            drawLens(xO1_px, "Objectif (L₁)", maxDistO1);
+            drawLens(xO2_px, "Oculaire (L₂)", maxDistO2);
+
+            ctx.font = 'bold 20px sans-serif';
+            ctx.fillStyle = '#2c3e50';
+            ctx.fillText("O₁", xO1_px + 8, centerY + 24);
+            ctx.fillText("O₂", xO2_px + 8, centerY + 24);
+
+            // Axe secondaire de l'objectif
+            ctx.strokeStyle = '#e74c3c';
+            ctx.lineWidth = 1.2;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            let startRayY = centerY - (xO1_px - startX) * alphaRad;
+            ctx.moveTo(startX, startRayY);
+            ctx.lineTo(xF1_prime_px, yB_prime_px); 
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // 1er rayon incident
+            ctx.strokeStyle = '#e74c3c';
+            ctx.lineWidth = 1.5;
+
+            let yBeforeLens1 = yOnLens1_O1 - (xO1_px - startX) * alphaRad;
+            ctx.beginPath();
+            ctx.moveTo(startX, yBeforeLens1);
+            ctx.lineTo(xO1_px, yOnLens1_O1);
+            ctx.stroke();
+            drawRayArrow(startX, yBeforeLens1, xO1_px, yOnLens1_O1, '#e74c3c', 0.5);
+
+            ctx.beginPath();
+            ctx.moveTo(xO1_px, yOnLens1_O1);
+            ctx.lineTo(xF1_prime_px, yB_prime_px); 
+            ctx.stroke();
+            drawRayArrow(xO1_px, yOnLens1_O1, xF1_prime_px, yB_prime_px, '#e74c3c', 0.5);
+
+            // Partie émergente oculaire (1er rayon)
+            ctx.strokeStyle = '#2980b9';
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(xF1_prime_px, yB_prime_px);
+            ctx.lineTo(canvas.width, centerY - (canvas.width - xO2_px) * alphaPrimeRad);
+            ctx.stroke();
+
+            ctx.setLineDash([]);
+            ctx.beginPath();
+            ctx.moveTo(xF1_prime_px, yB_prime_px);
+            ctx.lineTo(xO2_px, yImpactO2_Ray1); 
+            ctx.stroke();
+            drawRayArrow(xF1_prime_px, yB_prime_px, xO2_px, yImpactO2_Ray1, '#2980b9', 0.5);
+
+            let yEmergentEnd = yImpactO2_Ray1 - (canvas.width - xO2_px) * alphaPrimeRad;
+            ctx.beginPath();
+            ctx.moveTo(xO2_px, yImpactO2_Ray1);
+            ctx.lineTo(canvas.width, yEmergentEnd);
+            ctx.stroke();
+            drawRayArrow(xO2_px, yImpactO2_Ray1, canvas.width, yEmergentEnd, '#0400ff', 0.4);
+
+            // 2ème rayon incident
+            if (checkRay2.checked) {
+                ctx.strokeStyle = '#d35400';
+                ctx.lineWidth = 1.5;
+
+                let yStartRay2 = yOnLens2_O1 - (xO1_px - startX) * alphaRad;
+
+                ctx.beginPath();
+                ctx.moveTo(startX, yStartRay2);
+                ctx.lineTo(xO1_px, yOnLens2_O1);
+                ctx.stroke();
+                drawRayArrow(startX, yStartRay2, xO1_px, yOnLens2_O1, '#d35400', 0.5);
+
+                ctx.beginPath();
+                ctx.moveTo(xO1_px, yOnLens2_O1);
+                ctx.lineTo(xF1_prime_px, yB_prime_px);
+                ctx.stroke();
+                drawRayArrow(xO1_px, yOnLens2_O1, xF1_prime_px, yB_prime_px, '#d35400', 0.5);
+
+                ctx.beginPath();
+                ctx.moveTo(xF1_prime_px, yB_prime_px);
+                ctx.lineTo(xO2_px, yImpactO2_Ray2);
+                ctx.stroke();
+                drawRayArrow(xF1_prime_px, yB_prime_px, xO2_px, yImpactO2_Ray2, '#d35400', 0.5);
+
+                let yEmergentEnd2 = yImpactO2_Ray2 - (canvas.width - xO2_px) * alphaPrimeRad;
+                ctx.beginPath();
+                ctx.moveTo(xO2_px, yImpactO2_Ray2);
+                ctx.lineTo(canvas.width, yEmergentEnd2);
+                ctx.stroke();
+                drawRayArrow(xO2_px, yImpactO2_Ray2, canvas.width, yEmergentEnd2, '#d35400', 0.4);
+            }
+
+            // Prolongements d'image virtuelle (rayons virtuels vers la gauche)
+            ctx.setLineDash([3, 3]);
+            ctx.lineWidth = 1.2;
+
+            // 1er rayon virtuel (Bleu)
+            ctx.strokeStyle = '#2980b9';
+            let yVirtualAtLeft = yImpactO2_Ray1 + xO2_px * alphaPrimeRad;
+            ctx.beginPath();
+            ctx.moveTo(xO2_px, yImpactO2_Ray1);
+            ctx.lineTo(0, yVirtualAtLeft);
+            ctx.stroke();
+
+            // 2ème rayon virtuel (Orange)
+            if (checkRay2.checked) {
+                ctx.strokeStyle = '#d35400';
+                let yVirtualAtLeft2 = yImpactO2_Ray2 + xO2_px * alphaPrimeRad;
+                ctx.beginPath();
+                ctx.moveTo(xO2_px, yImpactO2_Ray2);
+                ctx.lineTo(0, yVirtualAtLeft2);
+                ctx.stroke();
+            }
+
+            ctx.setLineDash([]);
+
+            // Texte de l'image virtuelle B"∞ (parallèle au rayon bleu)
+			ctx.save();
+
+			// Calcul de l'angle direct le long du rayon bleu (de gauche à droite)
+			let deltaX = xO2_px - 0;
+			let deltaY = yImpactO2_Ray1 - yVirtualAtLeft;
+			let rayAngle = Math.atan2(deltaY, deltaX);
+
+			// Position sous le rayon bleu, du côté gauche
+			let textX = 30;
+			let textY = yVirtualAtLeft - 20;
+
+			ctx.translate(textX, textY);
+			ctx.rotate(rayAngle); // Suit exactement la pente du rayon
+
+			ctx.fillStyle = '#2980b9';
+			ctx.font = 'bold 15px sans-serif';
+			ctx.fillText("B\"∞ (image virtuelle à l'infini)", 0, 0);
+
+			ctx.restore();
+        }
+
+        updateAndDraw();
+    </script>
+</body>
+</html>
